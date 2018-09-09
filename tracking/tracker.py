@@ -74,6 +74,34 @@ class Tracker:
         self.pos_feats_all = [pos_feats[:opts['n_pos_update']]]
         self.neg_feats_all = [neg_feats[:opts['n_neg_update']]]
 
+    def test_filter_resp(self, image, gt_bbox):
+        # Estimate target bbox
+        self.model.eval()
+
+        pos_examples = gen_samples(self.pos_generator, gt_bbox,
+                                   opts['n_pos_update'],
+                                   opts['overlap_pos_update'])
+        neg_examples = gen_samples(self.neg_generator, gt_bbox,
+                                   opts['n_neg_update'],
+                                   opts['overlap_neg_update'])
+
+        self.model.eval()
+        extractor = RegionExtractor(image, pos_examples, opts['img_size'], opts['padding'], opts['batch_test'])
+        for i, regions in enumerate(extractor):
+            regions = Variable(regions)
+            if opts['use_gpu']:
+                regions = regions.cuda()
+            self.model.test_filter_resp(True, regions, out_layer='fc6')
+        extractor = RegionExtractor(image, neg_examples, opts['img_size'], opts['padding'], opts['batch_test'])
+        for i, regions in enumerate(extractor):
+            regions = Variable(regions)
+            if opts['use_gpu']:
+                regions = regions.cuda()
+            self.model.test_filter_resp(False, regions, out_layer='fc6')
+
+    def dump_filter_resp(self):
+        self.model.dump_filter_resp()
+
     def track(self, image):
         self.frame_idx += 1
 

@@ -66,6 +66,13 @@ class MDNet(nn.Module):
                                   nn.Linear(512, 512),
                                   nn.ReLU()))]))
 
+        self.filter_resp_on_target = OrderedDict([
+            (name, []) for name, _ in self.layers.named_children()
+        ])
+        self.filter_resp_on_bg = OrderedDict([
+            (name, []) for name, _ in self.layers.named_children()
+        ])
+
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
 
@@ -119,6 +126,34 @@ class MDNet(nn.Module):
             return x
         elif out_layer == 'fc6_softmax':
             return F.softmax(x)
+
+    def dump_filter_resp(self, perfix='filter_resp'):
+        for name, resp in self.filter_resp_on_target:
+            with open('{}_target_name.csv', 'w') as f:
+                for resp_per_frame in resp:
+                    f.write('{}\n'.format(','.join(resp_per_frame)))
+        for name, resp in self.filter_resp_on_bg:
+            with open('{}_bg_name.csv', 'w') as f:
+                for resp_per_frame in resp:
+                    f.write('{}\n'.format(','.join(resp_per_frame)))
+
+    def test_filter_resp(self, is_target, x, in_layer='conv1', out_layer='fc6'):
+        run = False
+        for name, module in self.layers.named_children():
+            if name == in_layer:
+                run = True
+            if run:
+                x = module(x)
+
+                if is_target:
+                    self.filter_resp_on_target[name].append(
+                        torch.nn.functional.avg_pool2d(x, x.shape[2:]).view(-1).cpu().numpy()
+                    )
+
+                if name == 'conv3':
+                    x = x.view(x.size(0), -1)
+                if name == out_layer:
+                    return
 
     def load_model(self, model_path):
         states = torch.load(model_path)
