@@ -51,7 +51,7 @@ def gen_config(args):
     else:
         savefig_dir = ''
 
-    return img_list, init_bbox, gt, savefig_dir, args.display, result_path
+    return img_list, init_bbox, gt, savefig_dir, args.display, result_path, seq_name
 
 
 if __name__ == "__main__":
@@ -65,10 +65,10 @@ if __name__ == "__main__":
     assert (args.seq != '' or args.json != '')
 
     # Generate sequence config
-    img_list, init_bbox, gt, savefig_dir, display, result_path = gen_config(args)
+    img_list, init_bbox, gt, savefig_dir, display, result_path, seq_name = gen_config(args)
 
     # Run tracker
-    result_bb, fps = run_mdnet(img_list, init_bbox, gt=gt, savefig_dir=savefig_dir, display=display)
+    result_bb, fps = run_mdnet(img_list, init_bbox, gt=gt, savefig_dir=savefig_dir, display=display, seq_name=seq_name)
 
     # Save result
     res = {'res': result_bb.round().tolist(), 'type': 'rect', 'fps': fps}

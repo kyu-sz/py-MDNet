@@ -127,17 +127,17 @@ class MDNet(nn.Module):
         elif out_layer == 'fc6_softmax':
             return F.softmax(x)
 
-    def dump_filter_resp(self, prefix='filter_resp', dir='analysis/data'):
+    def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         print('Dumping filter responses...')
-        os.makedirs(dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         for name, resp in self.filter_resp_on_target.items():
-            fn = os.path.abspath(os.path.join(dir, '{}_target_{}.csv'.format(prefix, name)))
+            fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
             print('Dumping average response on target of {} into {}'.format(name, fn))
             with open(fn, 'w') as f:
                 for resp_per_frame in resp:
                     f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
         for name, resp in self.filter_resp_on_bg.items():
-            fn = os.path.abspath(os.path.join(dir, '{}_bg_{}.csv'.format(prefix, name)))
+            fn = os.path.abspath(os.path.join(output_dir, '{}_bg_{}.csv'.format(prefix, name)))
             print('Dumping average response on background of {} into {}'.format(name, fn))
             with open(fn, 'w') as f:
                 for resp_per_frame in resp:

@@ -100,8 +100,8 @@ class Tracker:
                 regions = regions.cuda()
             self.model.test_filter_resp(False, regions, out_layer='fc6')
 
-    def dump_filter_resp(self):
-        self.model.dump_filter_resp()
+    def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
+        self.model.dump_filter_resp(prefix, output_dir)
 
     def track(self, image):
         self.frame_idx += 1

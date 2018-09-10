@@ -14,7 +14,7 @@ from tracker import Tracker
 from utils import overlap_ratio
 
 
-def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
+def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False, seq_name='unknown'):
     # Init bbox
     target_bbox = np.array(init_bbox)
     result_bb = np.zeros((len(img_list), 4))
@@ -96,7 +96,7 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
 
             tracker.test_filter_resp(image, gt[i])
 
-    tracker.dump_filter_resp()
+    tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
 
     fps = len(img_list) / spf_total
     return result_bb, fps
