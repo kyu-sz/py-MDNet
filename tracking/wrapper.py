@@ -56,6 +56,8 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False, seq_n
         if savefig:
             fig.savefig(os.path.join(savefig_dir, '0000.jpg'), dpi=dpi)
 
+    overlap_ratios = []
+
     # Main loop
     for i in range(1, len(img_list)):
         tic = time.time()
@@ -91,12 +93,16 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False, seq_n
             print("Frame %d/%d, Score %.3f, Time %.3f" % \
                   (i, len(img_list), target_score, spf))
         else:
-            print("Frame %d/%d, Overlap %.3f, Score %.3f, Time %.3f" %
-                  (i, len(img_list), overlap_ratio(gt[i], result_bb[i])[0], target_score, spf))
-
+            ratio = overlap_ratio(gt[i], result_bb[i])[0]
+            overlap_ratios.append(ratio)
             tracker.test_filter_resp(image, gt[i])
+            print("Frame %d/%d, Overlap %.3f, Score %.3f, Time %.3f" %
+                  (i, len(img_list), ratio, target_score, spf))
 
-    tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
+    if gt is None:
+        tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
+        with open(os.path.join('analysis', 'data', seq_name, 'overlap_ratio.csv'), 'w') as f:
+            f.write(','.join(map(str, overlap_ratios)))
 
     fps = len(img_list) / spf_total
     return result_bb, fps
