@@ -74,14 +74,14 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
         if display or savefig:
             im.set_data(image)
 
+            rect.set_xy(result_bb[i, :2])
+            rect.set_width(result_bb[i, 2])
+            rect.set_height(result_bb[i, 3])
+
             if gt is not None:
                 gt_rect.set_xy(gt[i, :2])
                 gt_rect.set_width(gt[i, 2])
                 gt_rect.set_height(gt[i, 3])
-
-            rect.set_xy(result_bb[i, :2])
-            rect.set_width(result_bb[i, 2])
-            rect.set_height(result_bb[i, 3])
 
             if display:
                 plt.pause(.01)
@@ -95,6 +95,10 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
         else:
             print("Frame %d/%d, Overlap %.3f, Score %.3f, Time %.3f" %
                   (i, len(img_list), overlap_ratio(gt[i], result_bb[i])[0], target_score, spf))
+
+            tracker.test_filter_resp(image, gt[i])
+
+    tracker.dump_filter_resp()
 
     fps = len(img_list) / spf_total
     return result_bb, fps

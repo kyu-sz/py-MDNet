@@ -127,17 +127,23 @@ class MDNet(nn.Module):
         elif out_layer == 'fc6_softmax':
             return F.softmax(x)
 
-    def dump_filter_resp(self, perfix='filter_resp'):
-        for name, resp in self.filter_resp_on_target:
-            with open('{}_target_name.csv', 'w') as f:
+    def dump_filter_resp(self, prefix='filter_resp', dir='analysis/data'):
+        print('Dumping filter responses...')
+        os.makedirs(dir, exist_ok=True)
+        for name, resp in self.filter_resp_on_target.items():
+            fn = os.path.abspath(os.path.join(dir, '{}_target_{}.csv'.format(prefix, name)))
+            print('Dumping average response on target of {} into {}'.format(name, fn))
+            with open(fn, 'w') as f:
                 for resp_per_frame in resp:
-                    f.write('{}\n'.format(','.join(resp_per_frame)))
-        for name, resp in self.filter_resp_on_bg:
-            with open('{}_bg_name.csv', 'w') as f:
+                    f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
+        for name, resp in self.filter_resp_on_bg.items():
+            fn = os.path.abspath(os.path.join(dir, '{}_bg_{}.csv'.format(prefix, name)))
+            print('Dumping average response on background of {} into {}'.format(name, fn))
+            with open(fn, 'w') as f:
                 for resp_per_frame in resp:
-                    f.write('{}\n'.format(','.join(resp_per_frame)))
+                    f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
 
-    def test_filter_resp(self, is_target, x, in_layer='conv1', out_layer='fc6'):
+    def test_filter_resp(self, is_target, x: torch.Tensor, in_layer='conv1', out_layer='fc6'):
         run = False
         for name, module in self.layers.named_children():
             if name == in_layer:
@@ -147,7 +153,15 @@ class MDNet(nn.Module):
 
                 if is_target:
                     self.filter_resp_on_target[name].append(
-                        torch.nn.functional.avg_pool2d(x, x.shape[2:]).view(-1).cpu().numpy()
+                        torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(), dim=0).view(-1).numpy()
+                        if x.dim() == 4
+                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                    )
+                else:
+                    self.filter_resp_on_bg[name].append(
+                        torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(), dim=0).view(-1).numpy()
+                        if x.dim() == 4
+                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
                     )
 
                 if name == 'conv3':

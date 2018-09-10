@@ -77,9 +77,9 @@ class Tracker:
         self.neg_feats_all = [neg_feats[:opts['n_neg_update']]]
 
     def test_filter_resp(self, image, gt_bbox):
-        # Estimate target bbox
         self.model.eval()
 
+        gt_bbox = np.array(gt_bbox)
         pos_examples = gen_samples(self.pos_generator, gt_bbox,
                                    opts['n_pos_update'],
                                    opts['overlap_pos_update'])
@@ -87,7 +87,6 @@ class Tracker:
                                    opts['n_neg_update'],
                                    opts['overlap_neg_update'])
 
-        self.model.eval()
         extractor = RegionExtractor(image, pos_examples, opts['img_size'], opts['padding'], opts['batch_test'])
         for i, regions in enumerate(extractor):
             regions = Variable(regions)
