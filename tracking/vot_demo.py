@@ -18,7 +18,8 @@ def poly2rec(poly):
 
 
 def gen_config(args):
-    save_home = '../result_fig'
+    savevideo_home = '../result_video'
+    savefig_home = '../result_fig'
     result_home = '../result'
 
     seq_path = args.seq_path
@@ -40,28 +41,37 @@ def gen_config(args):
     result_path = os.path.join(result_dir, 'result.json')
 
     if args.savefig:
-        savefig_dir = os.path.join(save_home, seq_name)
+        savefig_dir = os.path.join(savefig_home, seq_name)
         if not os.path.exists(savefig_dir):
             os.makedirs(savefig_dir)
     else:
         savefig_dir = ''
 
-    return img_list, init_bbox, gt, savefig_dir, args.display, result_path, seq_name
+    if args.savevideo:
+        savevideo_dir = os.path.join(savevideo_home, seq_name)
+        if not os.path.exists(savevideo_dir):
+            os.makedirs(savevideo_dir)
+    else:
+        savevideo_dir = ''
+
+    return img_list, init_bbox, gt, savefig_dir, savevideo_dir, args.display, result_path, seq_name
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('seq_path', type=str, help='path to a sequence folder in VOT')
     parser.add_argument('-f', '--savefig', action='store_true')
+    parser.add_argument('-v', '--savevideo', action='store_true')
     parser.add_argument('-d', '--display', action='store_true')
 
     args = parser.parse_args()
 
     # Generate sequence config
-    img_list, init_bbox, gt, savefig_dir, display, result_path, seq_name = gen_config(args)
+    img_list, init_bbox, gt, savefig_dir, savevideo_dir, display, result_path, seq_name = gen_config(args)
 
     # Run tracker
-    result_bb, fps = run_mdnet(img_list, init_bbox, gt=gt, savefig_dir=savefig_dir, display=display, seq_name=seq_name)
+    result_bb, fps = run_mdnet(img_list, init_bbox, gt=gt, seq_name=seq_name,
+                               savefig_dir=savefig_dir, savevideo_dir=savevideo_dir, display=display)
 
     # Save result
     res = {'res': result_bb.round().tolist(), 'type': 'rect', 'fps': fps}
