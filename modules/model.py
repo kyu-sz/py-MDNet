@@ -68,10 +68,10 @@ class MDNet(nn.Module):
 
         self.filter_resp_on_target = OrderedDict([
             (name, []) for name, _ in self.layers.named_children()
-        ])
+        ] + [('fc6', [])])
         self.filter_resp_on_bg = OrderedDict([
             (name, []) for name, _ in self.layers.named_children()
-        ])
+        ] + [('fc6', [])])
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -143,7 +143,7 @@ class MDNet(nn.Module):
                 for resp_per_frame in resp:
                     f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
 
-    def test_filter_resp(self, is_target, x: torch.Tensor, in_layer='conv1', out_layer='fc6'):
+    def test_filter_resp(self, is_target, x: torch.Tensor, k=0, in_layer='conv1', out_layer='fc6'):
         run = False
         for name, module in self.layers.named_children():
             if name == in_layer:
@@ -168,6 +168,12 @@ class MDNet(nn.Module):
                     x = x.view(x.size(0), -1)
                 if name == out_layer:
                     return
+
+        x = self.branches[k](x)
+        if is_target:
+            self.filter_resp_on_target['fc6'].append(torch.mean(x.data.cpu(), dim=0).view(-1).numpy())
+        else:
+            self.filter_resp_on_bg['fc6'].append(torch.mean(x.data.cpu(), dim=0).view(-1).numpy())
 
     def load_model(self, model_path):
         states = torch.load(model_path)

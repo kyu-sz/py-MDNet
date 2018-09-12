@@ -77,7 +77,7 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', savevideo_dir='', di
     savevideo = savevideo_dir != ''
     video_writer = cv2.VideoWriter(os.path.join(savevideo_dir, seq_name + '.avi'),
                                    cv2.VideoWriter.fourcc('M', 'J', 'P', 'G'),
-                                   50,
+                                   25,
                                    image.size) if savevideo else None
     if display or savefig or savevideo:
         dpi = 80.0
@@ -151,7 +151,7 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', savevideo_dir='', di
             print("Frame %d/%d, Overlap %.3f, Score %.3f, Time %.3f" %
                   (i, len(img_list), ratio, target_score, spf))
 
-    if gt is None:
+    if gt is not None:
         tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
 
         overlap_ratio_fn = os.path.join('analysis', 'data', seq_name, 'overlap_ratio.csv')
