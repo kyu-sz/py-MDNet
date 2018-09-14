@@ -45,8 +45,9 @@ class LRN(nn.Module):
 
 
 class MDNet(nn.Module):
-    def __init__(self, model_path=None, K=1):
+    def __init__(self, model_path=None, K=1, fe_layers=None):
         super(MDNet, self).__init__()
+        self.fe_layers = fe_layers or set()
         self.K = K
         self.layers = nn.Sequential(OrderedDict([
             ('conv1', nn.Sequential(nn.Conv2d(3, 96, kernel_size=7, stride=2),
@@ -66,12 +67,12 @@ class MDNet(nn.Module):
                                   nn.Linear(512, 512),
                                   nn.ReLU()))]))
 
-        self.filter_resp_on_target = OrderedDict([
-            (name, []) for name, _ in self.layers.named_children()
-        ] + [('fc6', [])])
-        self.filter_resp_on_bg = OrderedDict([
-            (name, []) for name, _ in self.layers.named_children()
-        ] + [('fc6', [])])
+        self.filter_resp_on_pos_samples = OrderedDict([
+            (name, []) for name, _ in self.layers.named_children() if name in self.fe_layers
+        ])
+        self.filter_resp_on_neg_samples = OrderedDict([
+            (name, []) for name, _ in self.layers.named_children() if name in self.fe_layers
+        ])
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -106,7 +107,7 @@ class MDNet(nn.Module):
                 params[k] = p
         return params
 
-    def forward(self, x, k=0, in_layer='conv1', out_layer='fc6'):
+    def forward(self, x, k=0, in_layer='conv1', out_layer='fc6', is_pos_sample=False, is_neg_sample=False):
         #
         # forward model from in_layer to out_layer
 
@@ -116,6 +117,23 @@ class MDNet(nn.Module):
                 run = True
             if run:
                 x = module(x)
+
+                if name in self.fe_layers:
+                    if is_pos_sample:
+                        self.filter_resp_on_pos_samples[name].append(
+                            torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
+                                       dim=0).view(-1).numpy()
+                            if x.dim() == 4
+                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                        )
+                    elif is_neg_sample:
+                        self.filter_resp_on_neg_samples[name].append(
+                            torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
+                                       dim=0).view(-1).numpy()
+                            if x.dim() == 4
+                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                        )
+
                 if name == 'conv3':
                     x = x.view(x.size(0), -1)
                 if name == out_layer:
@@ -130,50 +148,18 @@ class MDNet(nn.Module):
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         print('Dumping filter responses...')
         os.makedirs(output_dir, exist_ok=True)
-        for name, resp in self.filter_resp_on_target.items():
+        for name, resp in self.filter_resp_on_pos_samples.items():
             fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
             print('Dumping average response on target of {} into {}'.format(name, fn))
             with open(fn, 'w') as f:
                 for resp_per_frame in resp:
                     f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
-        for name, resp in self.filter_resp_on_bg.items():
+        for name, resp in self.filter_resp_on_neg_samples.items():
             fn = os.path.abspath(os.path.join(output_dir, '{}_bg_{}.csv'.format(prefix, name)))
             print('Dumping average response on background of {} into {}'.format(name, fn))
             with open(fn, 'w') as f:
                 for resp_per_frame in resp:
                     f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
-
-    def test_filter_resp(self, is_target, x: torch.Tensor, k=0, in_layer='conv1', out_layer='fc6'):
-        run = False
-        for name, module in self.layers.named_children():
-            if name == in_layer:
-                run = True
-            if run:
-                x = module(x)
-
-                if is_target:
-                    self.filter_resp_on_target[name].append(
-                        torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(), dim=0).view(-1).numpy()
-                        if x.dim() == 4
-                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
-                    )
-                else:
-                    self.filter_resp_on_bg[name].append(
-                        torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(), dim=0).view(-1).numpy()
-                        if x.dim() == 4
-                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
-                    )
-
-                if name == 'conv3':
-                    x = x.view(x.size(0), -1)
-                if name == out_layer:
-                    return
-
-        x = self.branches[k](x)
-        if is_target:
-            self.filter_resp_on_target['fc6'].append(torch.mean(x.data.cpu(), dim=0).view(-1).numpy())
-        else:
-            self.filter_resp_on_bg['fc6'].append(torch.mean(x.data.cpu(), dim=0).view(-1).numpy())
 
     def load_model(self, model_path):
         states = torch.load(model_path)

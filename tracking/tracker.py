@@ -92,13 +92,13 @@ class Tracker:
             regions = Variable(regions)
             if opts['use_gpu']:
                 regions = regions.cuda()
-            self.model.test_filter_resp(True, regions, out_layer='fc6')
+            self.model(regions, out_layer='fc6', is_pos_sample=True)
         extractor = RegionExtractor(image, neg_examples, opts['img_size'], opts['padding'], opts['batch_test'])
         for i, regions in enumerate(extractor):
             regions = Variable(regions)
             if opts['use_gpu']:
                 regions = regions.cuda()
-            self.model.test_filter_resp(False, regions, out_layer='fc6')
+            self.model(regions, out_layer='fc6', is_neg_sample=False)
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         self.model.dump_filter_resp(prefix, output_dir)
