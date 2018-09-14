@@ -1,5 +1,6 @@
 import os
 from collections import OrderedDict
+from typing import List
 
 import numpy as np
 import scipy.io
@@ -45,9 +46,106 @@ class LRN(nn.Module):
 
 
 class MDNet(nn.Module):
-    def __init__(self, model_path=None, K=1, fe_layers=None):
+    class FilterMeta:
+        def __init__(self,
+                     block_idx, layer_idx, filter_idx,
+                     bg_rel_thresh,
+                     unactivated_thresh,
+                     unactivated_cnt_thresh,
+                     low_resp_thresh):
+            self.block_idx = block_idx
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+
+            self.bg_rel_thresh = bg_rel_thresh
+            self.unactivated_thresh = unactivated_thresh
+            self.unactivated_cnt_thresh = unactivated_cnt_thresh
+            self.low_resp_thresh = low_resp_thresh
+
+            self.resp_sum = 0
+            self.resp_cnt = 0
+
+            self.max_resp = 0
+            self.unactivated_cnt = 0
+
+            self.bg_resp_sum = 0
+            self.bg_resp_cnt = 0
+            self.target_resp_sum = 0
+            self.target_resp_cnt = 0
+
+        def report_resp(self, resp: float, is_target=False, is_bg=False):
+            self.resp_sum += resp
+            self.resp_cnt += 1
+
+            if resp > self.max_resp:
+                self.max_resp = resp
+
+            if self.max_resp == 0 or resp < self.max_resp * self.unactivated_thresh:
+                self.unactivated_cnt += 1
+            else:
+                self.unactivated_cnt = 0
+
+            if is_bg:
+                self.bg_resp_sum += resp
+                self.bg_resp_cnt += 1
+            elif is_target:
+                self.target_resp_sum += resp
+                self.target_resp_cnt += 1
+
+        def average_resp(self):
+            return self.resp_sum / self.resp_cnt
+
+        def to_be_evolved(self, layer_avg_resp=0):
+            return (self.unactivated_cnt > self.unactivated_cnt_thresh and
+                    self.target_resp_sum / self.target_resp_cnt
+                    <= self.bg_resp_sum / self.bg_resp_cnt * self.bg_rel_thresh) or \
+                   self.average_resp() < layer_avg_resp * self.low_resp_thresh
+
+    class LayerMeta:
+        def __init__(self,
+                     block_idx,
+                     layer_idx,
+                     num_filters,
+                     transposed,
+                     bg_rel_thresh,
+                     unactivated_thresh,
+                     unactivated_cnt_thresh,
+                     low_resp_thresh):
+            self.block_idx = block_idx
+            self.layer_idx = layer_idx
+            self.transposed = transposed
+            self.filter_meta = [MDNet.FilterMeta(block_idx, layer_idx, filter_idx,
+                                                 bg_rel_thresh,
+                                                 unactivated_thresh,
+                                                 unactivated_cnt_thresh,
+                                                 low_resp_thresh)
+                                for filter_idx in range(num_filters)]
+            self.next_layer_meta = None
+
+            self.resp_sum = 0
+            self.resp_cnt = 0
+
+        def average_resp(self):
+            return self.resp_sum / self.resp_cnt
+
+        def report_resp(self, responses, is_target=False, is_bg=False):
+            self.resp_sum += sum(responses)
+            self.resp_cnt += len(responses)
+            for idx, resp in enumerate(responses):
+                self.filter_meta[idx].report_resp(resp, is_target=is_target, is_bg=is_bg)
+
+    def __init__(self,
+                 model_path=None,
+                 K=1,
+                 fe_layers=None,
+                 bg_rel_thresh=0.1,
+                 unactivated_thresh=0.01,
+                 unactivated_cnt_thresh: int = 1000,
+                 low_resp_thresh=0.1,
+                 record_resp=False):
         super(MDNet, self).__init__()
-        self.fe_layers = fe_layers or set()
+        if fe_layers is None:
+            fe_layers = set()
         self.K = K
         self.layers = nn.Sequential(OrderedDict([
             ('conv1', nn.Sequential(nn.Conv2d(3, 96, kernel_size=7, stride=2),
@@ -68,11 +166,17 @@ class MDNet(nn.Module):
                                   nn.ReLU()))]))
 
         self.filter_resp_on_pos_samples = OrderedDict([
-            (name, []) for name, _ in self.layers.named_children() if name in self.fe_layers
-        ])
+            (name, []) for name, _ in self.layers.named_children() if name in fe_layers
+        ]) if record_resp else None
         self.filter_resp_on_neg_samples = OrderedDict([
-            (name, []) for name, _ in self.layers.named_children() if name in self.fe_layers
-        ])
+            (name, []) for name, _ in self.layers.named_children() if name in fe_layers
+        ]) if record_resp else None
+
+        self.fe_layer_meta = self.create_fe_layer_meta(fe_layers,
+                                                       bg_rel_thresh,
+                                                       unactivated_thresh,
+                                                       unactivated_cnt_thresh,
+                                                       low_resp_thresh)
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -83,8 +187,39 @@ class MDNet(nn.Module):
             elif os.path.splitext(model_path)[1] == '.mat':
                 self.load_mat_model(model_path)
             else:
-                raise RuntimeError("Unkown model format: %s" % (model_path))
+                raise RuntimeError("Unknown model format: %s" % (model_path))
         self.build_param_dict()
+
+    def create_fe_layer_meta(self,
+                             fe_layers: List[str],
+                             bg_rel_thresh,
+                             unactivated_thresh,
+                             unactivated_cnt_thresh,
+                             low_resp_thresh) -> OrderedDict:
+        prev_layer_meta = None
+        layer_meta = []
+        for block_idx, (block_name, layer_block) in enumerate(self.layers.named_children()):
+            for idx, layer in enumerate(layer_block):
+                if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
+                    is_fe_layer = block_name in fe_layers
+                    if prev_layer_meta is not None or is_fe_layer:
+                        meta = MDNet.LayerMeta(block_idx,
+                                               idx,
+                                               layer.bias.shape[0],
+                                               layer.transposed if type(layer) is nn.Conv2d else False,
+                                               bg_rel_thresh,
+                                               unactivated_thresh,
+                                               unactivated_cnt_thresh,
+                                               low_resp_thresh)
+                        if prev_layer_meta is not None:
+                            prev_layer_meta.next_layer_meta = meta
+                            prev_layer_meta = None
+                        if is_fe_layer:
+                            layer_meta.append((block_name, meta))
+                            prev_layer_meta = meta
+        if prev_layer_meta is not None:
+            prev_layer_meta.next_layer_meta = MDNet.LayerMeta(-1, 1, 2, False, 0, 0, 0, 0)
+        return OrderedDict(layer_meta)
 
     def build_param_dict(self):
         self.params = OrderedDict()
@@ -107,7 +242,7 @@ class MDNet(nn.Module):
                 params[k] = p
         return params
 
-    def forward(self, x, k=0, in_layer='conv1', out_layer='fc6', is_pos_sample=False, is_neg_sample=False):
+    def forward(self, x, k=0, in_layer='conv1', out_layer='fc6', is_target=False, is_bg=False):
         #
         # forward model from in_layer to out_layer
 
@@ -118,21 +253,28 @@ class MDNet(nn.Module):
             if run:
                 x = module(x)
 
-                if name in self.fe_layers:
-                    if is_pos_sample:
+                if self.filter_resp_on_pos_samples is not None:
+                    if is_target:
                         self.filter_resp_on_pos_samples[name].append(
                             torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
                                        dim=0).view(-1).numpy()
                             if x.dim() == 4
                             else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
                         )
-                    elif is_neg_sample:
+                    elif is_bg:
                         self.filter_resp_on_neg_samples[name].append(
                             torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
                                        dim=0).view(-1).numpy()
                             if x.dim() == 4
                             else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
                         )
+
+                if name in self.fe_layer_meta:
+                    responses = torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
+                                           dim=0).view(-1).numpy() \
+                        if x.dim() == 4 \
+                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                    self.fe_layer_meta[name].report_resp(responses, is_target=is_target, is_bg=is_bg)
 
                 if name == 'conv3':
                     x = x.view(x.size(0), -1)
@@ -145,21 +287,45 @@ class MDNet(nn.Module):
         elif out_layer == 'fc6_softmax':
             return F.softmax(x)
 
+    def evolve_filters(self):
+        # print('Start filter evolution...')
+        for block_name, layer_meta in self.fe_layer_meta.items():
+            layer = self.layers[layer_meta.block_idx][layer_meta.layer_idx]
+            next_layer = self.layers[layer_meta.next_layer_meta.block_idx][layer_meta.next_layer_meta.layer_idx]
+            layer_avg_resp = layer_meta.average_resp()
+            for filter_idx, filter_meta in enumerate(layer_meta.filter_meta):
+                if filter_meta.to_be_evolved(layer_avg_resp):
+                    # print('Evolving filter {} in {}'.format(filter_idx, block_name))
+                    if layer_meta.transposed:
+                        assert layer.groups == 1, 'Cannot evolve grouped and transposed filters!'
+                        layer.weight.data[:, filter_idx, ...] = 0
+                    else:
+                        layer.weight.data[filter_idx, ...] = 0
+                    layer.bias.data[:] = filter_meta.average_resp()
+
+                    if layer_meta.next_layer_meta.transposed:
+                        next_layer.weight.data[filter_idx, ...] = -next_layer.weight.data[filter_idx, ...] * 2
+                    else:
+                        next_layer.weight.data[:, filter_idx, ...] = -next_layer.weight.data[:, filter_idx, ...] * 2
+
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
-        print('Dumping filter responses...')
-        os.makedirs(output_dir, exist_ok=True)
-        for name, resp in self.filter_resp_on_pos_samples.items():
-            fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
-            print('Dumping average response on target of {} into {}'.format(name, fn))
-            with open(fn, 'w') as f:
-                for resp_per_frame in resp:
-                    f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
-        for name, resp in self.filter_resp_on_neg_samples.items():
-            fn = os.path.abspath(os.path.join(output_dir, '{}_bg_{}.csv'.format(prefix, name)))
-            print('Dumping average response on background of {} into {}'.format(name, fn))
-            with open(fn, 'w') as f:
-                for resp_per_frame in resp:
-                    f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
+        if self.filter_resp_on_pos_samples is not None:
+            print('Dumping filter responses...')
+            os.makedirs(output_dir, exist_ok=True)
+            for name, resp in self.filter_resp_on_pos_samples.items():
+                fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
+                print('Dumping average response on target of {} into {}'.format(name, fn))
+                with open(fn, 'w') as f:
+                    for resp_per_frame in resp:
+                        f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
+            for name, resp in self.filter_resp_on_neg_samples.items():
+                fn = os.path.abspath(os.path.join(output_dir, '{}_bg_{}.csv'.format(prefix, name)))
+                print('Dumping average response on background of {} into {}'.format(name, fn))
+                with open(fn, 'w') as f:
+                    for resp_per_frame in resp:
+                        f.write('{}\n'.format(','.join(map(str, resp_per_frame))))
+        else:
+            raise RuntimeError("Filter responses are not recorded!")
 
     def load_model(self, model_path):
         states = torch.load(model_path)

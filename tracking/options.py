@@ -1,5 +1,5 @@
-from collections import OrderedDict
 import os
+from collections import OrderedDict
 
 opts = OrderedDict()
 opts['use_gpu'] = True
@@ -48,3 +48,10 @@ opts['momentum'] = 0.9
 opts['grad_clip'] = 10
 opts['lr_mult'] = {'fc6': 10}
 opts['ft_layers'] = ['fc']
+
+# Filter evolution options
+opts['fe_layers'] = ['fc4', 'fc5']
+opts['bg_rel_thresh'] = 0.1
+opts['unactivated_thresh'] = 0.1
+opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update'] + opts['n_samples']) * 5
+opts['low_resp_thresh'] = 0.1

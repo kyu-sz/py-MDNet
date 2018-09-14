@@ -28,7 +28,12 @@ class Tracker:
         self.bbreg_bbox = self.target_bbox
 
         # Init model
-        self.model = MDNet(opts['model_path'])
+        self.model = MDNet(opts['model_path'],
+                           fe_layers=opts['fe_layers'],
+                           bg_rel_thresh=opts['bg_rel_thresh'],
+                           unactivated_thresh=opts['unactivated_thresh'],
+                           unactivated_cnt_thresh=opts['unactivated_cnt_thresh'],
+                           low_resp_thresh=opts['low_resp_thresh'])
         if opts['use_gpu']:
             self.model = self.model.cuda()
         self.model.set_learnable_params(opts['ft_layers'])
@@ -92,13 +97,13 @@ class Tracker:
             regions = Variable(regions)
             if opts['use_gpu']:
                 regions = regions.cuda()
-            self.model(regions, out_layer='fc6', is_pos_sample=True)
+            self.model(regions, out_layer='fc6', is_target=True)
         extractor = RegionExtractor(image, neg_examples, opts['img_size'], opts['padding'], opts['batch_test'])
         for i, regions in enumerate(extractor):
             regions = Variable(regions)
             if opts['use_gpu']:
                 regions = regions.cuda()
-            self.model(regions, out_layer='fc6', is_neg_sample=False)
+            self.model(regions, out_layer='fc6', is_bg=True)
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         self.model.dump_filter_resp(prefix, output_dir)
@@ -156,12 +161,14 @@ class Tracker:
             nframes = min(opts['n_frames_short'], len(self.pos_feats_all))
             pos_data = torch.stack(self.pos_feats_all[-nframes:], 0).view(-1, self.feat_dim)
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
+            self.model.evolve_filters()
             train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
 
         # Long term update
         elif self.frame_idx % opts['long_interval'] == 0:
             pos_data = torch.stack(self.pos_feats_all, 0).view(-1, self.feat_dim)
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
+            self.model.evolve_filters()
             train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
 
         return self.bbreg_bbox, target_score
@@ -248,8 +255,8 @@ def train(model, criterion, optimizer, pos_feats, neg_feats, maxiter, in_layer='
             model.train()
 
         # forward
-        pos_score = model(batch_pos_feats, in_layer=in_layer)
-        neg_score = model(batch_neg_feats, in_layer=in_layer)
+        pos_score = model(batch_pos_feats, in_layer=in_layer, is_target=True)
+        neg_score = model(batch_neg_feats, in_layer=in_layer, is_bg=True)
 
         # optimize
         loss = criterion(pos_score, neg_score)

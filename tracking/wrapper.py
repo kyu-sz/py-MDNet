@@ -57,7 +57,11 @@ def fig2cv2(figure):
     return pil2cv2(fig2img(figure).convert('RGB'))
 
 
-def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', savevideo_dir='', display=False, seq_name='unknown'):
+def run_mdnet(img_list, init_bbox, gt=None,
+              savefig_dir='', savevideo_dir='',
+              display=False,
+              test_filter_resp=False,
+              seq_name='unknown'):
     # Init bbox
     target_bbox = np.array(init_bbox)
     result_bb = np.zeros((len(img_list), 4))
@@ -147,12 +151,15 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', savevideo_dir='', di
         else:
             ratio = overlap_ratio(gt[i], result_bb[i])[0]
             overlap_ratios.append(ratio)
-            tracker.test_filter_resp(image, gt[i])
             print("Frame %d/%d, Overlap %.3f, Score %.3f, Time %.3f" %
                   (i, len(img_list), ratio, target_score, spf))
 
+            if test_filter_resp:
+                tracker.test_filter_resp(image, gt[i])
+
     if gt is not None:
-        tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
+        if test_filter_resp:
+            tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
 
         overlap_ratio_fn = os.path.join('analysis', 'data', seq_name, 'overlap_ratio.csv')
         print('Writing overlap ratios to {}'.format(overlap_ratio_fn))
