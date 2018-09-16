@@ -61,7 +61,8 @@ def run_mdnet(img_list, init_bbox, gt=None,
               savefig_dir='', savevideo_dir='',
               display=False,
               test_filter_resp=False,
-              seq_name='unknown'):
+              seq_name='unknown',
+              gpu='0'):
     # Init bbox
     target_bbox = np.array(init_bbox)
     result_bb = np.zeros((len(img_list), 4))
@@ -72,7 +73,7 @@ def run_mdnet(img_list, init_bbox, gt=None,
     image = Image.open(img_list[0]).convert('RGB')
 
     # Initialize the tracker
-    tracker = Tracker(init_bbox, image)
+    tracker = Tracker(init_bbox, image, int(gpu))
 
     spf_total = time.time() - tic
 

@@ -21,7 +21,7 @@ torch.cuda.manual_seed(789)
 
 
 class Tracker:
-    def __init__(self, init_bbox, first_frame):
+    def __init__(self, init_bbox, first_frame, gpu: int = 0):
         self.frame_idx = 0
 
         self.target_bbox = np.array(init_bbox)
@@ -34,7 +34,8 @@ class Tracker:
                            unactivated_thresh=opts['unactivated_thresh'],
                            unactivated_cnt_thresh=opts['unactivated_cnt_thresh'],
                            low_resp_thresh=opts['low_resp_thresh'])
-        if opts['use_gpu']:
+        if opts['use_gpu'] and gpu >= 0:
+            torch.cuda.set_device(gpu)
             self.model = self.model.cuda()
         self.model.set_learnable_params(opts['ft_layers'])
 

@@ -54,7 +54,7 @@ def gen_config(args):
     else:
         savevideo_dir = ''
 
-    return img_list, init_bbox, gt, savefig_dir, savevideo_dir, args.display, result_path, seq_name
+    return img_list, init_bbox, gt, savefig_dir, savevideo_dir, args.display, result_path, seq_name, args.gpu
 
 
 if __name__ == "__main__":
@@ -64,17 +64,19 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--savevideo', action='store_true')
     parser.add_argument('-d', '--display', action='store_true')
     parser.add_argument('-t', '--test_resp')
+    parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu')
 
     args = parser.parse_args()
 
     # Generate sequence config
-    img_list, init_bbox, gt, savefig_dir, savevideo_dir, display, result_path, seq_name = gen_config(args)
+    img_list, init_bbox, gt, savefig_dir, savevideo_dir, display, result_path, seq_name, gpu = gen_config(args)
 
     # Run tracker
     result_bb, fps = run_mdnet(img_list, init_bbox, gt=gt,
                                seq_name=seq_name,
                                savefig_dir=savefig_dir, savevideo_dir=savevideo_dir,
-                               display=display, test_filter_resp=args.test_resp)
+                               display=display, test_filter_resp=args.test_resp,
+                               gpu=gpu)
 
     # Save result
     res = {'res': result_bb.round().tolist(), 'type': 'rect', 'fps': fps}
