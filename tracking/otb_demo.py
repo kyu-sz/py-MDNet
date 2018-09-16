@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('-j', '--json', default='', help='input json')
     parser.add_argument('-f', '--savefig', action='store_true')
     parser.add_argument('-d', '--display', action='store_true')
-    parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu')
+    parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu', default='0')
 
     args = parser.parse_args()
     assert (args.seq != '' or args.json != '')

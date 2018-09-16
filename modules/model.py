@@ -1,6 +1,7 @@
 import os
 from collections import OrderedDict
 from typing import List
+import heapq
 
 import numpy as np
 import scipy.io
@@ -49,18 +50,16 @@ class MDNet(nn.Module):
     class FilterMeta:
         def __init__(self,
                      block_idx, layer_idx, filter_idx,
-                     bg_rel_thresh,
+                     target_rel_thresh,
                      unactivated_thresh,
-                     unactivated_cnt_thresh,
-                     low_resp_thresh):
+                     unactivated_cnt_thresh):
             self.block_idx = block_idx
             self.layer_idx = layer_idx
             self.filter_idx = filter_idx
 
-            self.bg_rel_thresh = bg_rel_thresh
+            self.target_rel_thresh = target_rel_thresh
             self.unactivated_thresh = unactivated_thresh
             self.unactivated_cnt_thresh = unactivated_cnt_thresh
-            self.low_resp_thresh = low_resp_thresh
 
             self.resp_sum = 0
             self.resp_cnt = 0
@@ -95,11 +94,13 @@ class MDNet(nn.Module):
         def average_resp(self):
             return self.resp_sum / self.resp_cnt
 
-        def to_be_evolved(self, layer_avg_resp=0):
-            return (self.unactivated_cnt > self.unactivated_cnt_thresh and
-                    self.target_resp_sum / self.target_resp_cnt
-                    <= self.bg_resp_sum / self.bg_resp_cnt * self.bg_rel_thresh) or \
-                   self.average_resp() < layer_avg_resp * self.low_resp_thresh
+        def target_rel(self):
+            return self.target_resp_sum * self.bg_resp_cnt / (self.target_resp_cnt * self.bg_resp_sum)
+
+        def to_be_evolved(self, resp_thresh=0):
+            return (self.unactivated_cnt > self.unactivated_cnt_thresh or
+                    self.average_resp() < resp_thresh) and \
+                   self.target_rel() <= self.target_rel_thresh
 
     class LayerMeta:
         def __init__(self,
@@ -109,16 +110,14 @@ class MDNet(nn.Module):
                      transposed,
                      bg_rel_thresh,
                      unactivated_thresh,
-                     unactivated_cnt_thresh,
-                     low_resp_thresh):
+                     unactivated_cnt_thresh):
             self.block_idx = block_idx
             self.layer_idx = layer_idx
             self.transposed = transposed
             self.filter_meta = [MDNet.FilterMeta(block_idx, layer_idx, filter_idx,
                                                  bg_rel_thresh,
                                                  unactivated_thresh,
-                                                 unactivated_cnt_thresh,
-                                                 low_resp_thresh)
+                                                 unactivated_cnt_thresh)
                                 for filter_idx in range(num_filters)]
             self.next_layer_meta = None
 
@@ -138,7 +137,7 @@ class MDNet(nn.Module):
                  model_path=None,
                  K=1,
                  fe_layers=None,
-                 bg_rel_thresh=0.1,
+                 target_rel_thresh=0.1,
                  unactivated_thresh=0.01,
                  unactivated_cnt_thresh: int = 1000,
                  low_resp_thresh=0.1,
@@ -173,10 +172,10 @@ class MDNet(nn.Module):
         ]) if record_resp else None
 
         self.fe_layer_meta = self.create_fe_layer_meta(fe_layers,
-                                                       bg_rel_thresh,
+                                                       target_rel_thresh,
                                                        unactivated_thresh,
-                                                       unactivated_cnt_thresh,
-                                                       low_resp_thresh)
+                                                       unactivated_cnt_thresh)
+        self.low_resp_thresh = low_resp_thresh
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -194,13 +193,14 @@ class MDNet(nn.Module):
                              fe_layers: List[str],
                              bg_rel_thresh,
                              unactivated_thresh,
-                             unactivated_cnt_thresh,
-                             low_resp_thresh) -> OrderedDict:
+                             unactivated_cnt_thresh) -> OrderedDict:
         prev_layer_meta = None
         layer_meta = []
         for block_idx, (block_name, layer_block) in enumerate(self.layers.named_children()):
             for idx, layer in enumerate(layer_block):
                 if type(layer) is nn.Conv2d or type(layer) is nn.Linear:
+                    assert not (type(layer) is nn.Conv2d and layer.groups != 1), \
+                        'Grouped convolution layer is not supported!'
                     is_fe_layer = block_name in fe_layers
                     if prev_layer_meta is not None or is_fe_layer:
                         meta = MDNet.LayerMeta(block_idx,
@@ -209,8 +209,7 @@ class MDNet(nn.Module):
                                                layer.transposed if type(layer) is nn.Conv2d else False,
                                                bg_rel_thresh,
                                                unactivated_thresh,
-                                               unactivated_cnt_thresh,
-                                               low_resp_thresh)
+                                               unactivated_cnt_thresh)
                         if prev_layer_meta is not None:
                             prev_layer_meta.next_layer_meta = meta
                             prev_layer_meta = None
@@ -218,7 +217,7 @@ class MDNet(nn.Module):
                             layer_meta.append((block_name, meta))
                             prev_layer_meta = meta
         if prev_layer_meta is not None:
-            prev_layer_meta.next_layer_meta = MDNet.LayerMeta(-1, 1, 2, False, 0, 0, 0, 0)
+            prev_layer_meta.next_layer_meta = MDNet.LayerMeta(-1, 1, 2, False, 0, 0, 0)
         return OrderedDict(layer_meta)
 
     def build_param_dict(self):
@@ -253,28 +252,29 @@ class MDNet(nn.Module):
             if run:
                 x = module(x)
 
-                if self.filter_resp_on_pos_samples is not None:
-                    if is_target:
-                        self.filter_resp_on_pos_samples[name].append(
-                            torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
-                                       dim=0).view(-1).numpy()
-                            if x.dim() == 4
-                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
-                        )
-                    elif is_bg:
-                        self.filter_resp_on_neg_samples[name].append(
-                            torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
-                                       dim=0).view(-1).numpy()
-                            if x.dim() == 4
-                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
-                        )
+                if is_target or is_bg:
+                    if self.filter_resp_on_pos_samples is not None:
+                        if is_target:
+                            self.filter_resp_on_pos_samples[name].append(
+                                torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
+                                           dim=0).view(-1).numpy()
+                                if x.dim() == 4
+                                else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                            )
+                        else:
+                            self.filter_resp_on_neg_samples[name].append(
+                                torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
+                                           dim=0).view(-1).numpy()
+                                if x.dim() == 4
+                                else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                            )
 
-                if name in self.fe_layer_meta:
-                    responses = torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
-                                           dim=0).view(-1).numpy() \
-                        if x.dim() == 4 \
-                        else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
-                    self.fe_layer_meta[name].report_resp(responses, is_target=is_target, is_bg=is_bg)
+                    if name in self.fe_layer_meta:
+                        responses = torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]).cpu(),
+                                               dim=0).view(-1).numpy() \
+                            if x.dim() == 4 \
+                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                        self.fe_layer_meta[name].report_resp(responses, is_target=is_target, is_bg=is_bg)
 
                 if name == 'conv3':
                     x = x.view(x.size(0), -1)
@@ -292,21 +292,30 @@ class MDNet(nn.Module):
         for block_name, layer_meta in self.fe_layer_meta.items():
             layer = self.layers[layer_meta.block_idx][layer_meta.layer_idx]
             next_layer = self.layers[layer_meta.next_layer_meta.block_idx][layer_meta.next_layer_meta.layer_idx]
-            layer_avg_resp = layer_meta.average_resp()
-            for filter_idx, filter_meta in enumerate(layer_meta.filter_meta):
-                if filter_meta.to_be_evolved(layer_avg_resp):
-                    # print('Evolving filter {} in {}'.format(filter_idx, block_name))
-                    if layer_meta.transposed:
-                        assert layer.groups == 1, 'Cannot evolve grouped and transposed filters!'
-                        layer.weight.data[:, filter_idx, ...] = 0
-                    else:
-                        layer.weight.data[filter_idx, ...] = 0
-                    layer.bias.data[:] = filter_meta.average_resp()
+            resp_thresh = layer_meta.average_resp() * self.low_resp_thresh
 
-                    if layer_meta.next_layer_meta.transposed:
-                        next_layer.weight.data[filter_idx, ...] = -next_layer.weight.data[filter_idx, ...] * 2
-                    else:
-                        next_layer.weight.data[:, filter_idx, ...] = -next_layer.weight.data[:, filter_idx, ...] * 2
+            filters_to_be_evolved = list(filter(lambda meta: meta.to_be_evolved(resp_thresh),
+                                                layer_meta.filter_meta))
+            max_num_evolving_filters = len(layer_meta.filter_meta) >> 4
+            if len(filters_to_be_evolved) > max_num_evolving_filters:
+                filters_to_be_evolved = heapq.nsmallest(max_num_evolving_filters,
+                                                        filters_to_be_evolved,
+                                                        lambda meta: meta.target_rel())
+
+            for filter_meta in filters_to_be_evolved:
+                # print('Evolving filter {} in {}'.format(filter_idx, block_name))
+                if layer_meta.transposed:
+                    layer.weight.data[:, filter_meta.filter_idx, ...] = 0
+                else:
+                    layer.weight.data[filter_meta.filter_idx, ...] = 0
+                layer.bias.data[:] = max(resp_thresh, filter_meta.average_resp()) / 2
+
+                if layer_meta.next_layer_meta.transposed:
+                    next_layer.weight.data[filter_meta.filter_idx, ...] = \
+                        -next_layer.weight.data[filter_meta.filter_idx, ...] * 2
+                else:
+                    next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
+                        -next_layer.weight.data[:, filter_meta.filter_idx, ...] * 2
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:

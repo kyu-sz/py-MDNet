@@ -30,7 +30,7 @@ class Tracker:
         # Init model
         self.model = MDNet(opts['model_path'],
                            fe_layers=opts['fe_layers'],
-                           bg_rel_thresh=opts['bg_rel_thresh'],
+                           target_rel_thresh=opts['target_rel_thresh'],
                            unactivated_thresh=opts['unactivated_thresh'],
                            unactivated_cnt_thresh=opts['unactivated_cnt_thresh'],
                            low_resp_thresh=opts['low_resp_thresh'])

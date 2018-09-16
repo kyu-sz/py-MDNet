@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--savevideo', action='store_true')
     parser.add_argument('-d', '--display', action='store_true')
     parser.add_argument('-t', '--test_resp')
-    parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu')
+    parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu', default='0')
 
     args = parser.parse_args()
 
