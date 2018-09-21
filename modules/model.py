@@ -141,7 +141,8 @@ class MDNet(nn.Module):
                  unactivated_thresh=0.01,
                  unactivated_cnt_thresh: int = 1000,
                  low_resp_thresh=0.1,
-                 record_resp=False):
+                 record_resp=False,
+                 lr_boost=1.5):
         super(MDNet, self).__init__()
         if fe_layers is None:
             fe_layers = set()
@@ -176,6 +177,7 @@ class MDNet(nn.Module):
                                                        unactivated_thresh,
                                                        unactivated_cnt_thresh)
         self.low_resp_thresh = low_resp_thresh
+        self.lr_boost = lr_boost
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -308,14 +310,14 @@ class MDNet(nn.Module):
                     layer.weight.data[:, filter_meta.filter_idx, ...] = 0
                 else:
                     layer.weight.data[filter_meta.filter_idx, ...] = 0
-                layer.bias.data[:] = max(resp_thresh, filter_meta.average_resp()) / 2
+                layer.bias.data[:] = max(resp_thresh, filter_meta.average_resp()) / self.lr_boost
 
                 if layer_meta.next_layer_meta.transposed:
                     next_layer.weight.data[filter_meta.filter_idx, ...] = \
-                        -next_layer.weight.data[filter_meta.filter_idx, ...] * 2
+                        -next_layer.weight.data[filter_meta.filter_idx, ...] * self.lr_boost
                 else:
                     next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
-                        -next_layer.weight.data[:, filter_meta.filter_idx, ...] * 2
+                        -next_layer.weight.data[:, filter_meta.filter_idx, ...] * self.lr_boost
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:

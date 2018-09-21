@@ -33,7 +33,8 @@ class Tracker:
                            target_rel_thresh=opts['target_rel_thresh'],
                            unactivated_thresh=opts['unactivated_thresh'],
                            unactivated_cnt_thresh=opts['unactivated_cnt_thresh'],
-                           low_resp_thresh=opts['low_resp_thresh'])
+                           low_resp_thresh=opts['low_resp_thresh'],
+                           lr_boost=opts['lr_boost'])
         if opts['use_gpu'] and gpu >= 0:
             torch.cuda.set_device(gpu)
             self.model = self.model.cuda()
