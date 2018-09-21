@@ -256,24 +256,24 @@ class MDNet(nn.Module):
                     if self.filter_resp_on_pos_samples is not None:
                         if is_target:
                             self.filter_resp_on_pos_samples[name].append(
-                                torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
-                                           dim=0).view(-1).numpy()
+                                torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]),
+                                           dim=0).cpu().view(-1).numpy()
                                 if x.dim() == 4
-                                else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                                else torch.mean(x.data, dim=0).view(-1).cpu().numpy()
                             )
                         else:
                             self.filter_resp_on_neg_samples[name].append(
-                                torch.mean(torch.nn.functional.avg_pool2d(x, x.shape[-2:]).data.cpu(),
-                                           dim=0).view(-1).numpy()
+                                torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]),
+                                           dim=0).cpu().view(-1).numpy()
                                 if x.dim() == 4
-                                else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                                else torch.mean(x.data, dim=0).view(-1).cpu().numpy()
                             )
 
                     if name in self.fe_layer_meta:
-                        responses = torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]).cpu(),
-                                               dim=0).view(-1).numpy() \
+                        responses = torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]),
+                                               dim=0).view(-1).cpu().numpy() \
                             if x.dim() == 4 \
-                            else torch.mean(x.data.cpu(), dim=0).view(-1).numpy()
+                            else torch.mean(x.data, dim=0).view(-1).cpu().numpy()
                         self.fe_layer_meta[name].report_resp(responses, is_target=is_target, is_bg=is_bg)
 
                 if name == 'conv3':
