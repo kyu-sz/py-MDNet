@@ -72,6 +72,18 @@ class MDNet(nn.Module):
             self.target_resp_sum = 0
             self.target_resp_cnt = 0
 
+        def reset(self):
+            self.resp_sum = 0
+            self.resp_cnt = 0
+
+            self.max_resp = 0
+            self.unactivated_cnt = 0
+
+            self.bg_resp_sum = 0
+            self.bg_resp_cnt = 0
+            self.target_resp_sum = 0
+            self.target_resp_cnt = 0
+
         def report_resp(self, resp: float, is_target=False, is_bg=False):
             self.resp_sum += resp
             self.resp_cnt += 1
@@ -318,6 +330,8 @@ class MDNet(nn.Module):
                 else:
                     next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
                         -next_layer.weight.data[:, filter_meta.filter_idx, ...] * self.lr_boost
+
+                filter_meta.reset()
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:
