@@ -7,14 +7,8 @@ import vot
 from PIL import Image
 from trax.region import Rectangle
 
-
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
-
-
-tracking_module_path = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
-                                    '../tracking')
-eprint('Loading tracker from', tracking_module_path)
+script_dir = os.path.dirname(os.path.join(os.path.realpath(__file__)))
+tracking_module_path = os.path.join(script_dir, '../tracking')
 sys.path.insert(0, tracking_module_path)
 from tracker import Tracker
 
@@ -27,7 +21,9 @@ if not imagefile:
     sys.exit(0)
 first_frame = Image.open(imagefile).convert('RGB')
 
-mdnet = Tracker((selection.x, selection.y, selection.width, selection.height), first_frame)
+mdnet = Tracker((selection.x, selection.y, selection.width, selection.height),
+                first_frame,
+                gpu=0)
 
 while True:
     imagefile = handle.frame()

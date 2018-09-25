@@ -91,7 +91,7 @@ class MDNet(nn.Module):
             if resp > self.max_resp:
                 self.max_resp = resp
 
-            if self.max_resp == 0 or resp < self.max_resp * self.unactivated_thresh:
+            if resp <= self.max_resp * self.unactivated_thresh:
                 self.unactivated_cnt += 1
             else:
                 self.unactivated_cnt = 0
@@ -107,15 +107,19 @@ class MDNet(nn.Module):
             return self.resp_sum / self.resp_cnt
 
         def target_rel(self):
-            return self.target_resp_sum * self.bg_resp_cnt / (self.target_resp_cnt * self.bg_resp_sum)
+            return 100 \
+                if self.target_resp_cnt * self.bg_resp_sum == 0 \
+                else self.target_resp_sum * self.bg_resp_cnt / (self.target_resp_cnt * self.bg_resp_sum)
 
         def to_be_evolved(self, resp_thresh=0):
-            return (self.unactivated_cnt > self.unactivated_cnt_thresh or
+            return self.resp_cnt > 0 and \
+                   (self.unactivated_cnt >= self.unactivated_cnt_thresh or
                     self.average_resp() < resp_thresh) and \
                    self.target_rel() <= self.target_rel_thresh
 
     class LayerMeta:
         def __init__(self,
+                     block_name,
                      block_idx,
                      layer_idx,
                      num_filters,
@@ -123,6 +127,7 @@ class MDNet(nn.Module):
                      bg_rel_thresh,
                      unactivated_thresh,
                      unactivated_cnt_thresh):
+            self.block_name = block_name
             self.block_idx = block_idx
             self.layer_idx = layer_idx
             self.transposed = transposed
@@ -137,7 +142,7 @@ class MDNet(nn.Module):
             self.resp_cnt = 0
 
         def average_resp(self):
-            return self.resp_sum / self.resp_cnt
+            return self.resp_sum / self.resp_cnt if self.resp_cnt > 0 else 0
 
         def report_resp(self, responses, is_target=False, is_bg=False):
             self.resp_sum += sum(responses)
@@ -217,7 +222,8 @@ class MDNet(nn.Module):
                         'Grouped convolution layer is not supported!'
                     is_fe_layer = block_name in fe_layers
                     if prev_layer_meta is not None or is_fe_layer:
-                        meta = MDNet.LayerMeta(block_idx,
+                        meta = MDNet.LayerMeta(block_name,
+                                               block_idx,
                                                idx,
                                                layer.bias.shape[0],
                                                layer.transposed if type(layer) is nn.Conv2d else False,
@@ -231,7 +237,7 @@ class MDNet(nn.Module):
                             layer_meta.append((block_name, meta))
                             prev_layer_meta = meta
         if prev_layer_meta is not None:
-            prev_layer_meta.next_layer_meta = MDNet.LayerMeta(-1, 1, 2, False, 0, 0, 0)
+            prev_layer_meta.next_layer_meta = MDNet.LayerMeta('', -1, 1, 2, False, 0, 0, 0)
         return OrderedDict(layer_meta)
 
     def build_param_dict(self):
@@ -259,6 +265,7 @@ class MDNet(nn.Module):
         #
         # forward model from in_layer to out_layer
 
+        output = None
         run = False
         for name, module in self.layers.named_children():
             if name == in_layer:
@@ -293,13 +300,14 @@ class MDNet(nn.Module):
                 if name == 'conv3':
                     x = x.view(x.size(0), -1)
                 if name == out_layer:
-                    return x
+                    output = x
 
         x = self.branches[k](x)
         if out_layer == 'fc6':
-            return x
+            output = x
         elif out_layer == 'fc6_softmax':
-            return F.softmax(x)
+            output = F.softmax(x)
+        return output
 
     def evolve_filters(self):
         # print('Start filter evolution...')
@@ -315,6 +323,8 @@ class MDNet(nn.Module):
                 filters_to_be_evolved = heapq.nsmallest(max_num_evolving_filters,
                                                         filters_to_be_evolved,
                                                         lambda meta: meta.target_rel())
+
+            # print('Evolving {} filters in {}...'.format(len(filters_to_be_evolved), block_name))
 
             for filter_meta in filters_to_be_evolved:
                 # print('Evolving filter {} in {}'.format(filter_idx, block_name))

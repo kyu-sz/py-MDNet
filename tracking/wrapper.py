@@ -162,7 +162,9 @@ def run_mdnet(img_list, init_bbox, gt=None,
         if test_filter_resp:
             tracker.dump_filter_resp(output_dir=os.path.join('analysis', 'data', seq_name))
 
-        overlap_ratio_fn = os.path.join('analysis', 'data', seq_name, 'overlap_ratio.csv')
+        dir = os.path.join('analysis', 'data', seq_name)
+        os.makedirs(dir, exist_ok=True)
+        overlap_ratio_fn = os.path.join(dir, 'overlap_ratio.csv')
         print('Average overlap: {}'.format(np.average(overlap_ratios)))
         print('Writing overlap ratios to {}'.format(overlap_ratio_fn))
         with open(overlap_ratio_fn, 'w') as f:

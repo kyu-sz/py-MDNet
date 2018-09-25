@@ -28,6 +28,7 @@ class Tracker:
         self.bbreg_bbox = self.target_bbox
 
         # Init model
+        print('Loading model from {}...'.format(opts['model_path']))
         self.model = MDNet(opts['model_path'],
                            fe_layers=opts['fe_layers'],
                            target_rel_thresh=opts['target_rel_thresh'],
@@ -46,13 +47,14 @@ class Tracker:
         self.update_optimizer = set_optimizer(self.model, opts['lr_update'])
 
         # Train bbox regressor
+        self.bbreg = None
         bbreg_examples = gen_samples(SampleGenerator('uniform', first_frame.size, 0.3, 1.5, 1.1),
-                                     self.target_bbox, opts['n_bbreg'], opts['overlap_bbreg'], opts['scale_bbreg'])
-        assert len(bbreg_examples) > 0
-        bbreg_feats = forward_samples(self.model, first_frame, bbreg_examples)
-        assert len(bbreg_feats) > 0
-        self.bbreg = BBRegressor(first_frame.size)
-        self.bbreg.train(bbreg_feats, bbreg_examples, self.target_bbox)
+                                     self.target_bbox, opts['n_bbreg'], opts['overlap_bbreg'], opts['scale_bbreg'],
+                                     force_nonempty=False)
+        if len(bbreg_examples) > 0:
+            bbreg_feats = forward_samples(self.model, first_frame, bbreg_examples)
+            self.bbreg = BBRegressor(first_frame.size)
+            self.bbreg.train(bbreg_feats, bbreg_examples, self.target_bbox)
 
         # Draw pos/neg samples
         pos_examples = gen_samples(SampleGenerator('gaussian', first_frame.size, 0.1, 1.2),
@@ -82,6 +84,8 @@ class Tracker:
         # Init pos/neg features for update
         self.pos_feats_all = [pos_feats[:opts['n_pos_update']]]
         self.neg_feats_all = [neg_feats[:opts['n_neg_update']]]
+
+        print('Tracker initialized!')
 
     def test_filter_resp(self, image, gt_bbox):
         self.model.eval()
@@ -133,10 +137,13 @@ class Tracker:
             self.target_bbox = samples[top_idx].mean(axis=0)
 
             # Bbox regression
-            bbreg_samples = samples[top_idx]
-            bbreg_feats = forward_samples(self.model, image, bbreg_samples)
-            bbreg_samples = self.bbreg.predict(bbreg_feats, bbreg_samples)
-            self.bbreg_bbox = bbreg_samples.mean(axis=0)
+            if self.bbreg is None:
+                self.bbreg_bbox = self.target_bbox
+            else:
+                bbreg_samples = samples[top_idx]
+                bbreg_feats = forward_samples(self.model, image, bbreg_samples)
+                bbreg_samples = self.bbreg.predict(bbreg_feats, bbreg_samples)
+                self.bbreg_bbox = bbreg_samples.mean(axis=0)
 
         # Data collect
         if success:
@@ -149,8 +156,8 @@ class Tracker:
                                        opts['overlap_neg_update'])
 
             # Extract pos/neg features
-            pos_feats = forward_samples(self.model, image, pos_examples)
-            neg_feats = forward_samples(self.model, image, neg_examples)
+            pos_feats = forward_samples(self.model, image, pos_examples, is_target=True)
+            neg_feats = forward_samples(self.model, image, neg_examples, is_bg=True)
             self.pos_feats_all.append(pos_feats)
             self.neg_feats_all.append(neg_feats)
             if len(self.pos_feats_all) > opts['n_frames_long']:
@@ -173,20 +180,25 @@ class Tracker:
             self.model.evolve_filters()
             train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
 
+        # print('Tracking finished!')
+
         return self.bbreg_bbox, target_score
 
 
-def forward_samples(model, image, samples, out_layer='conv3'):
+def forward_samples(model, image, samples, out_layer='conv3', is_target=False, is_bg=False):
     assert len(samples) > 0
 
     model.eval()
+
     extractor = RegionExtractor(image, samples, opts['img_size'], opts['padding'], opts['batch_test'])
+
+    feats = None
     for i, regions in enumerate(extractor):
         regions = Variable(regions)
         if opts['use_gpu']:
             regions = regions.cuda()
-        feat = model(regions, out_layer=out_layer)
-        if i == 0:
+        feat = model(regions, out_layer=out_layer, is_target=is_target, is_bg=is_bg)
+        if feats is None:
             feats = feat.data.clone()
         else:
             feats = torch.cat((feats, feat.data.clone()), 0)
@@ -257,8 +269,8 @@ def train(model, criterion, optimizer, pos_feats, neg_feats, maxiter, in_layer='
             model.train()
 
         # forward
-        pos_score = model(batch_pos_feats, in_layer=in_layer, is_target=True)
-        neg_score = model(batch_neg_feats, in_layer=in_layer, is_bg=True)
+        pos_score = model(batch_pos_feats, in_layer=in_layer)
+        neg_score = model(batch_neg_feats, in_layer=in_layer)
 
         # optimize
         loss = criterion(pos_score, neg_score)
