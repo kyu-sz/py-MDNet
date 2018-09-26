@@ -193,6 +193,7 @@ class MDNet(nn.Module):
                                                        target_rel_thresh,
                                                        unactivated_thresh,
                                                        unactivated_cnt_thresh)
+        self.fe_layer_robin = iter(self.fe_layer_meta.items())
         self.low_resp_thresh = low_resp_thresh
         self.lr_boost = lr_boost
 
@@ -301,6 +302,8 @@ class MDNet(nn.Module):
                     x = x.view(x.size(0), -1)
                 if name == out_layer:
                     output = x
+                    if not is_bg and not is_target:
+                        return output
 
         x = self.branches[k](x)
         if out_layer == 'fc6':
@@ -310,38 +313,44 @@ class MDNet(nn.Module):
         return output
 
     def evolve_filters(self):
-        # print('Start filter evolution...')
-        for block_name, layer_meta in self.fe_layer_meta.items():
-            layer = self.layers[layer_meta.block_idx][layer_meta.layer_idx]
-            next_layer = self.layers[layer_meta.next_layer_meta.block_idx][layer_meta.next_layer_meta.layer_idx]
-            resp_thresh = layer_meta.average_resp() * self.low_resp_thresh
+        if len(self.fe_layer_meta) == 0:
+            return
+        try:
+            block_name, layer_meta = next(self.fe_layer_robin)
+        except StopIteration:
+            self.fe_layer_robin = iter(self.fe_layer_meta.items())
+            block_name, layer_meta = next(self.fe_layer_robin)
 
-            filters_to_be_evolved = list(filter(lambda meta: meta.to_be_evolved(resp_thresh),
-                                                layer_meta.filter_meta))
-            max_num_evolving_filters = len(layer_meta.filter_meta) >> 4
-            if len(filters_to_be_evolved) > max_num_evolving_filters:
-                filters_to_be_evolved = heapq.nsmallest(max_num_evolving_filters,
-                                                        filters_to_be_evolved,
-                                                        lambda meta: meta.target_rel())
+        layer = self.layers[layer_meta.block_idx][layer_meta.layer_idx]
+        next_layer = self.layers[layer_meta.next_layer_meta.block_idx][layer_meta.next_layer_meta.layer_idx]
+        resp_thresh = layer_meta.average_resp() * self.low_resp_thresh
 
-            # print('Evolving {} filters in {}...'.format(len(filters_to_be_evolved), block_name))
+        filters_to_be_evolved = list(filter(lambda meta: meta.to_be_evolved(resp_thresh),
+                                            layer_meta.filter_meta))
+        max_num_evolving_filters = len(layer_meta.filter_meta) >> 4
+        if len(filters_to_be_evolved) > max_num_evolving_filters:
+            filters_to_be_evolved = heapq.nsmallest(max_num_evolving_filters,
+                                                    filters_to_be_evolved,
+                                                    lambda meta: meta.target_rel())
 
-            for filter_meta in filters_to_be_evolved:
-                # print('Evolving filter {} in {}'.format(filter_idx, block_name))
-                if layer_meta.transposed:
-                    layer.weight.data[:, filter_meta.filter_idx, ...] = 0
-                else:
-                    layer.weight.data[filter_meta.filter_idx, ...] = 0
-                layer.bias.data[:] = max(resp_thresh, filter_meta.average_resp()) / self.lr_boost
+        # print('Evolving {} filters in {}...'.format(len(filters_to_be_evolved), block_name))
 
-                if layer_meta.next_layer_meta.transposed:
-                    next_layer.weight.data[filter_meta.filter_idx, ...] = \
-                        -next_layer.weight.data[filter_meta.filter_idx, ...] * self.lr_boost
-                else:
-                    next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
-                        -next_layer.weight.data[:, filter_meta.filter_idx, ...] * self.lr_boost
+        for filter_meta in filters_to_be_evolved:
+            # print('Evolving filter {} in {}'.format(filter_idx, block_name))
+            if layer_meta.transposed:
+                layer.weight.data[:, filter_meta.filter_idx, ...] = 0
+            else:
+                layer.weight.data[filter_meta.filter_idx, ...] = 0
+            layer.bias.data[:] = max(resp_thresh, filter_meta.average_resp()) / self.lr_boost
 
-                filter_meta.reset()
+            if layer_meta.next_layer_meta.transposed:
+                next_layer.weight.data[filter_meta.filter_idx, ...] = \
+                    -next_layer.weight.data[filter_meta.filter_idx, ...] * self.lr_boost
+            else:
+                next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
+                    -next_layer.weight.data[:, filter_meta.filter_idx, ...] * self.lr_boost
+
+            filter_meta.reset()
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:
