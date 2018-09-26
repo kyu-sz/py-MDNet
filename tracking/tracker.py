@@ -171,7 +171,7 @@ class Tracker:
             nframes = min(opts['n_frames_short'], len(self.pos_feats_all))
             pos_data = torch.stack(self.pos_feats_all[-nframes:], 0).view(-1, self.feat_dim)
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
-            self.model.evolve_filters()
+            # self.model.evolve_filters()
             train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
 
         # Long term update
