@@ -15,9 +15,10 @@ from model import MDNet, BinaryLoss
 from options import *
 from sample_generator import gen_samples, SampleGenerator
 
-np.random.seed(123)
-torch.manual_seed(456)
-torch.cuda.manual_seed(789)
+if not opts['random']:
+    np.random.seed(123)
+    torch.manual_seed(456)
+    torch.cuda.manual_seed(789)
 
 
 class Tracker:

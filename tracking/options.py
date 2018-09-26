@@ -4,6 +4,8 @@ from collections import OrderedDict
 opts = OrderedDict()
 opts['use_gpu'] = True
 
+opts['random'] = False
+
 opts['model_path'] = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
                                   '../models/mdnet_vot-otb.pth')
 
@@ -53,6 +55,6 @@ opts['ft_layers'] = ['fc']
 opts['fe_layers'] = ['fc4', 'fc5']
 opts['target_rel_thresh'] = 0.1
 opts['unactivated_thresh'] = 0.01
-opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update']) * 10
+opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update']) * opts['long_interval']
 opts['low_resp_thresh'] = 0.1
 opts['lr_boost'] = 2
