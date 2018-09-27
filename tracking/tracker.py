@@ -172,14 +172,20 @@ class Tracker:
             pos_data = torch.stack(self.pos_feats_all[-nframes:], 0).view(-1, self.feat_dim)
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
             # self.model.evolve_filters()
-            train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
+            loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
+            while loss >= 1:
+                loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data,
+                             opts['maxiter_update'])
 
         # Long term update
         elif self.frame_idx % opts['long_interval'] == 0:
             pos_data = torch.stack(self.pos_feats_all, 0).view(-1, self.feat_dim)
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
             self.model.evolve_filters()
-            train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
+            loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
+            while loss >= 1:
+                loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data,
+                             opts['maxiter_update'])
 
         # print('Tracking finished!')
 
@@ -236,6 +242,8 @@ def train(model, criterion, optimizer, pos_feats, neg_feats, maxiter, in_layer='
     pos_pointer = 0
     neg_pointer = 0
 
+    final_loss = 0
+
     for iter in range(maxiter):
 
         # select pos idx
@@ -280,4 +288,7 @@ def train(model, criterion, optimizer, pos_feats, neg_feats, maxiter, in_layer='
         torch.nn.utils.clip_grad_norm(model.parameters(), opts['grad_clip'])
         optimizer.step()
 
-        # print "Iter %d, Loss %.4f" % (iter, loss.data[0])
+        final_loss = loss.data[0]
+        # print("Iter %d, Loss %.4f" % (iter, final_loss))
+
+    return final_loss
