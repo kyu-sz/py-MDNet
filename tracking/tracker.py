@@ -173,7 +173,7 @@ class Tracker:
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
             # self.model.evolve_filters()
             loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
-            while loss >= 1:
+            while 0 < opts['converge_thresh'] <= loss:
                 loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data,
                              opts['maxiter_update'])
 
@@ -183,7 +183,7 @@ class Tracker:
             neg_data = torch.stack(self.neg_feats_all, 0).view(-1, self.feat_dim)
             self.model.evolve_filters()
             loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data, opts['maxiter_update'])
-            while loss >= 1:
+            while 0 < opts['converge_thresh'] <= loss:
                 loss = train(self.model, self.criterion, self.update_optimizer, pos_data, neg_data,
                              opts['maxiter_update'])
 

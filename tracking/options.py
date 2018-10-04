@@ -58,3 +58,4 @@ opts['unactivated_thresh'] = 0.01
 opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update']) * opts['long_interval']
 opts['low_resp_thresh'] = 0.01
 opts['lr_boost'] = 1
+opts['converge_thresh'] = 0
