@@ -52,9 +52,10 @@ opts['lr_mult'] = {'fc6': 10}
 opts['ft_layers'] = ['fc']
 
 # Filter evolution options
-opts['fe_layers'] = []#['fc4', 'fc5']
+opts['fe_layers'] = ['fc4', 'fc5']
 opts['target_rel_thresh'] = 0.01
 opts['unactivated_thresh'] = 0.01
 opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update']) * opts['long_interval']
 opts['low_resp_thresh'] = 0.01
 opts['lr_boost'] = 1
+opts['converge_thresh'] = 0
