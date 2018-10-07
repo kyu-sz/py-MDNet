@@ -59,3 +59,5 @@ opts['unactivated_cnt_thresh'] = (opts['n_pos_update'] + opts['n_neg_update']) *
 opts['low_resp_thresh'] = 0.01
 opts['lr_boost'] = 1
 opts['converge_thresh'] = 0
+opts['max_times_evolution_per_filter'] = 1
+opts['max_times_evolution'] = 2

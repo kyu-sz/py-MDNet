@@ -52,7 +52,8 @@ class MDNet(nn.Module):
                      block_idx, layer_idx, filter_idx,
                      target_rel_thresh,
                      unactivated_thresh,
-                     unactivated_cnt_thresh):
+                     unactivated_cnt_thresh,
+                     max_times_evolution_per_filter):
             self.block_idx = block_idx
             self.layer_idx = layer_idx
             self.filter_idx = filter_idx
@@ -72,7 +73,10 @@ class MDNet(nn.Module):
             self.target_resp_sum = 0
             self.target_resp_cnt = 0
 
-        def reset(self):
+            self.evolution_cnt = 0
+            self.max_times_evolution_per_filter = max_times_evolution_per_filter
+
+        def mark_evolved(self):
             self.resp_sum = 0
             self.resp_cnt = 0
 
@@ -83,6 +87,8 @@ class MDNet(nn.Module):
             self.bg_resp_cnt = 0
             self.target_resp_sum = 0
             self.target_resp_cnt = 0
+
+            self.evolution_cnt += 1
 
         def report_resp(self, resp: float, is_target=False, is_bg=False):
             self.resp_sum += resp
@@ -112,7 +118,9 @@ class MDNet(nn.Module):
                 else self.target_resp_sum * self.bg_resp_cnt / (self.target_resp_cnt * self.bg_resp_sum)
 
         def to_be_evolved(self, resp_thresh=0):
-            return self.resp_cnt > 0 and \
+            return (not self.max_times_evolution_per_filter or
+                    self.evolution_cnt < self.max_times_evolution_per_filter) and \
+                   self.resp_cnt > 0 and \
                    (self.unactivated_cnt >= self.unactivated_cnt_thresh or
                     self.average_resp() < resp_thresh) and \
                    self.target_rel() <= self.target_rel_thresh
@@ -126,7 +134,8 @@ class MDNet(nn.Module):
                      transposed,
                      bg_rel_thresh,
                      unactivated_thresh,
-                     unactivated_cnt_thresh):
+                     unactivated_cnt_thresh,
+                     max_times_evolution_per_filter):
             self.block_name = block_name
             self.block_idx = block_idx
             self.layer_idx = layer_idx
@@ -134,7 +143,8 @@ class MDNet(nn.Module):
             self.filter_meta = [MDNet.FilterMeta(block_idx, layer_idx, filter_idx,
                                                  bg_rel_thresh,
                                                  unactivated_thresh,
-                                                 unactivated_cnt_thresh)
+                                                 unactivated_cnt_thresh,
+                                                 max_times_evolution_per_filter)
                                 for filter_idx in range(num_filters)]
             self.next_layer_meta = None
 
@@ -159,7 +169,9 @@ class MDNet(nn.Module):
                  unactivated_cnt_thresh: int = 1000,
                  low_resp_thresh=0.1,
                  record_resp=False,
-                 lr_boost=1.5):
+                 lr_boost=1.5,
+                 max_times_evolution_per_filter=0,
+                 max_times_evolution=0):
         super(MDNet, self).__init__()
         if fe_layers is None:
             fe_layers = set()
@@ -192,10 +204,14 @@ class MDNet(nn.Module):
         self.fe_layer_meta = self.create_fe_layer_meta(fe_layers,
                                                        target_rel_thresh,
                                                        unactivated_thresh,
-                                                       unactivated_cnt_thresh)
+                                                       unactivated_cnt_thresh,
+                                                       max_times_evolution_per_filter)
         self.fe_layer_robin = iter(self.fe_layer_meta.items())
         self.low_resp_thresh = low_resp_thresh
         self.lr_boost = lr_boost
+
+        self.max_times_evolution = max_times_evolution
+        self.evolution_cnt = 0
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
                                                      nn.Linear(512, 2)) for _ in range(K)])
@@ -213,7 +229,8 @@ class MDNet(nn.Module):
                              fe_layers: List[str],
                              bg_rel_thresh,
                              unactivated_thresh,
-                             unactivated_cnt_thresh) -> OrderedDict:
+                             unactivated_cnt_thresh,
+                             max_times_evolution_per_filter) -> OrderedDict:
         prev_layer_meta = None
         layer_meta = []
         for block_idx, (block_name, layer_block) in enumerate(self.layers.named_children()):
@@ -230,7 +247,8 @@ class MDNet(nn.Module):
                                                layer.transposed if type(layer) is nn.Conv2d else False,
                                                bg_rel_thresh,
                                                unactivated_thresh,
-                                               unactivated_cnt_thresh)
+                                               unactivated_cnt_thresh,
+                                               max_times_evolution_per_filter)
                         if prev_layer_meta is not None:
                             prev_layer_meta.next_layer_meta = meta
                             prev_layer_meta = None
@@ -238,7 +256,7 @@ class MDNet(nn.Module):
                             layer_meta.append((block_name, meta))
                             prev_layer_meta = meta
         if prev_layer_meta is not None:
-            prev_layer_meta.next_layer_meta = MDNet.LayerMeta('', -1, 1, 2, False, 0, 0, 0)
+            prev_layer_meta.next_layer_meta = MDNet.LayerMeta('', -1, 1, 2, False, 0, 0, 0, 0)
         return OrderedDict(layer_meta)
 
     def build_param_dict(self):
@@ -350,7 +368,11 @@ class MDNet(nn.Module):
                 next_layer.weight.data[:, filter_meta.filter_idx, ...] = \
                     -next_layer.weight.data[:, filter_meta.filter_idx, ...] * self.lr_boost
 
-            filter_meta.reset()
+            filter_meta.mark_evolved()
+
+            self.evolution_cnt += 1
+            if self.max_times_evolution and self.evolution_cnt >= self.max_times_evolution:
+                break
 
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:
