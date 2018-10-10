@@ -9,6 +9,11 @@ import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
 import cv2
+import torch
+modules_path = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
+                            '../modules')
+sys.path.insert(0, modules_path)
+from model import MDNet
 
 modules_path = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
                             '../modules')
@@ -62,7 +67,7 @@ def run_mdnet(img_list, init_bbox, gt=None,
               display=False,
               test_filter_resp=False,
               seq_name='unknown',
-              gpu='0'):
+              gpu='0', analysis=False):
     # Init bbox
     target_bbox = np.array(init_bbox)
     result_bb = np.zeros((len(img_list), 4))
@@ -113,6 +118,13 @@ def run_mdnet(img_list, init_bbox, gt=None,
 
     overlap_ratios = []
 
+    if analysis:
+        load_PATH = '../models/latest.pth'
+        the_model = torch.load(load_PATH)
+        the_model_dict = the_model.state_dict()
+        fe_layers = ['layers.fc4.1.weight', 'layers.fc4.1.bias', 'layers.fc5.1.weight', 'layers.fc5.1.bias']
+        pretrained_dict = {k: v for k, v in the_model_dict.items() if k in fe_layers}
+
     # Main loop
     for i in range(1, len(img_list)):
         tic = time.time()
@@ -120,6 +132,8 @@ def run_mdnet(img_list, init_bbox, gt=None,
         image = Image.open(img_list[i]).convert('RGB')
 
         # Track and save result
+        if analysis:
+            tracker.model.load_state_dict(pretrained_dict)
         result_bb[i], target_score = tracker.track(image)
 
         spf = time.time() - tic
@@ -157,6 +171,9 @@ def run_mdnet(img_list, init_bbox, gt=None,
 
             if test_filter_resp:
                 tracker.test_filter_resp(image, gt[i])
+
+    save_PATH = '../models/latest.pth'
+    torch.save(tracker.model.state_dict(), save_PATH)
 
     if gt is not None:
         if test_filter_resp:

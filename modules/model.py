@@ -158,11 +158,12 @@ class MDNet(nn.Module):
                  unactivated_thresh=0.01,
                  unactivated_cnt_thresh = 1000,
                  low_resp_thresh=0.1,
-                 record_resp=False,
+                 record_resp=True,
                  lr_boost=1.5):
         super(MDNet, self).__init__()
         if fe_layers is None:
             fe_layers = set()
+        self.fe_layers = fe_layers
         self.K = K
         self.layers = nn.Sequential(OrderedDict([
             ('conv1', nn.Sequential(nn.Conv2d(3, 96, kernel_size=7, stride=2),
@@ -276,7 +277,7 @@ class MDNet(nn.Module):
                 x = module(x)
 
                 if is_target or is_bg:
-                    if test_resp:
+                    if test_resp and self.filter_resp_on_pos_samples is not None and name in self.fe_layers:
                         if is_target:
                             self.filter_resp_on_pos_samples[name].append(
                                 torch.mean(torch.nn.functional.avg_pool2d(x.data, x.shape[-2:]),
@@ -356,7 +357,10 @@ class MDNet(nn.Module):
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:
             print('Dumping filter responses...')
-            os.makedirs(output_dir, exist_ok=True)
+            try:
+                os.makedirs(output_dir)
+            except:
+                pass
             for name, resp in self.filter_resp_on_pos_samples.items():
                 fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
                 print('Dumping average response on target of {} into {}'.format(name, fn))
