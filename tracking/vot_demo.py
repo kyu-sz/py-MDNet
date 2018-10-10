@@ -64,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--savevideo', action='store_true')
     parser.add_argument('-d', '--display', action='store_true')
     parser.add_argument('-t', '--test_resp')
+    parser.add_argument('-a', '--analysis')
     parser.add_argument('-g', '--gpu', type=str, help='id of GPU to use, -1 for cpu', default='0')
 
     args = parser.parse_args()
@@ -76,7 +77,7 @@ if __name__ == "__main__":
                                seq_name=seq_name,
                                savefig_dir=savefig_dir, savevideo_dir=savevideo_dir,
                                display=display, test_filter_resp=args.test_resp,
-                               gpu=gpu)
+                               gpu=gpu, analysis=args.analysis)
 
     # Save result
     res = {'res': result_bb.round().tolist(), 'type': 'rect', 'fps': fps}
