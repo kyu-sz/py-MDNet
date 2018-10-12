@@ -22,7 +22,7 @@ if not opts['random']:
 
 
 class Tracker:
-    def __init__(self, init_bbox, first_frame, gpu: int = 0):
+    def __init__(self, init_bbox, first_frame, gpu):
         self.frame_idx = 0
 
         self.target_bbox = np.array(init_bbox)

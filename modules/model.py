@@ -1,6 +1,6 @@
 import os
 from collections import OrderedDict
-from typing import List
+#from typing import List
 import heapq
 
 import numpy as np
@@ -90,7 +90,7 @@ class MDNet(nn.Module):
 
             self.evolution_cnt += 1
 
-        def report_resp(self, resp: float, is_target=False, is_bg=False):
+        def report_resp(self, resp, is_target=False, is_bg=False):
             self.resp_sum += resp
             self.resp_cnt += 1
 
@@ -166,7 +166,7 @@ class MDNet(nn.Module):
                  fe_layers=None,
                  target_rel_thresh=0.1,
                  unactivated_thresh=0.01,
-                 unactivated_cnt_thresh: int = 1000,
+                 unactivated_cnt_thresh = 1000,
                  low_resp_thresh=0.1,
                  record_resp=False,
                  lr_boost=1.5,
@@ -226,11 +226,11 @@ class MDNet(nn.Module):
         self.build_param_dict()
 
     def create_fe_layer_meta(self,
-                             fe_layers: List[str],
+                             fe_layers,
                              bg_rel_thresh,
                              unactivated_thresh,
                              unactivated_cnt_thresh,
-                             max_times_evolution_per_filter) -> OrderedDict:
+                             max_times_evolution_per_filter):
         prev_layer_meta = None
         layer_meta = []
         for block_idx, (block_name, layer_block) in enumerate(self.layers.named_children()):
