@@ -217,6 +217,7 @@ def forward_samples(model, image, samples, out_layer='conv3', is_target=False, i
 def set_optimizer(model, lr_base, lr_mult=opts['lr_mult'], momentum=opts['momentum'], w_decay=opts['w_decay']):
     params = model.get_learnable_params()
     param_list = []
+    lr = lr_base
     for k, p in params.items():
         lr = lr_base
         for l, m in lr_mult.items():
@@ -267,6 +268,7 @@ def train(model, criterion, optimizer, pos_feats, neg_feats, maxiter, in_layer='
         # hard negative mining
         if batch_neg_cand > batch_neg:
             model.eval()
+            neg_cand_score = None
             for start in range(0, batch_neg_cand, batch_test):
                 end = min(start + batch_test, batch_neg_cand)
                 score = model(batch_neg_feats[start:end], in_layer=in_layer)

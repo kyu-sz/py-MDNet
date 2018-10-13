@@ -1,6 +1,6 @@
 import os
 from collections import OrderedDict
-#from typing import List
+# from typing import List
 import heapq
 
 import numpy as np
@@ -75,8 +75,9 @@ class MDNet(nn.Module):
 
             self.evolution_cnt = 0
             self.max_times_evolution_per_filter = max_times_evolution_per_filter
+            self.last_evolution_ts = -1
 
-        def mark_evolved(self):
+        def mark_evolved(self, ts):
             self.resp_sum = 0
             self.resp_cnt = 0
 
@@ -89,6 +90,7 @@ class MDNet(nn.Module):
             self.target_resp_cnt = 0
 
             self.evolution_cnt += 1
+            self.last_evolution_ts = ts
 
         def report_resp(self, resp, is_target=False, is_bg=False):
             self.resp_sum += resp
@@ -162,11 +164,11 @@ class MDNet(nn.Module):
 
     def __init__(self,
                  model_path=None,
-                 K=1,
+                 num_branches=1,
                  fe_layers=None,
                  target_rel_thresh=0.1,
                  unactivated_thresh=0.01,
-                 unactivated_cnt_thresh = 1000,
+                 unactivated_cnt_thresh=1000,
                  low_resp_thresh=0.1,
                  record_resp=False,
                  lr_boost=1.5,
@@ -176,7 +178,7 @@ class MDNet(nn.Module):
         if fe_layers is None:
             fe_layers = set()
         self.fe_layers = fe_layers
-        self.K = K
+        self.K = num_branches
         self.layers = nn.Sequential(OrderedDict([
             ('conv1', nn.Sequential(nn.Conv2d(3, 96, kernel_size=7, stride=2),
                                     nn.ReLU(),
@@ -215,7 +217,7 @@ class MDNet(nn.Module):
         self.evolution_cnt = 0
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
-                                                     nn.Linear(512, 2)) for _ in range(K)])
+                                                     nn.Linear(512, 2)) for _ in range(num_branches)])
 
         if model_path is not None:
             if os.path.splitext(model_path)[1] == '.pth':
@@ -223,7 +225,9 @@ class MDNet(nn.Module):
             elif os.path.splitext(model_path)[1] == '.mat':
                 self.load_mat_model(model_path)
             else:
-                raise RuntimeError("Unknown model format: %s" % (model_path))
+                raise RuntimeError("Unknown model format: %s" % model_path)
+
+        self.params = None
         self.build_param_dict()
 
     def create_fe_layer_meta(self,
@@ -265,7 +269,7 @@ class MDNet(nn.Module):
         for name, module in self.layers.named_children():
             append_params(self.params, module, name)
         for k, module in enumerate(self.branches):
-            append_params(self.params, module, 'fc6_%d' % (k))
+            append_params(self.params, module, 'fc6_%d' % k)
 
     def set_learnable_params(self, layers):
         for k, p in self.params.items():
@@ -379,10 +383,8 @@ class MDNet(nn.Module):
     def dump_filter_resp(self, prefix='filter_resp', output_dir=os.path.join('analysis', 'data')):
         if self.filter_resp_on_pos_samples is not None:
             print('Dumping filter responses...')
-            try:
+            if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
-            except:
-                pass
             for name, resp in self.filter_resp_on_pos_samples.items():
                 fn = os.path.abspath(os.path.join(output_dir, '{}_target_{}.csv'.format(prefix, name)))
                 print('Dumping average response on target of {} into {}'.format(name, fn))
