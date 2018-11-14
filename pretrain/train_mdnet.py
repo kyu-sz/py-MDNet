@@ -82,7 +82,6 @@ def train_mdnet(gpu):
     else:
         states = torch.load(opts['init_model_path'])
         best_prec = states['best_prec']
-
     # Init criterion and optimizer.
     cls_criterion = ClassificationLoss()
     inst_emb_criterion = InstanceEmbeddingLoss()

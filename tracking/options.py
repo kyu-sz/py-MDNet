@@ -11,7 +11,7 @@ opts['random'] = False
 #                                   '../models/mdnet_vot-otb.pth')
 opts['model_type'] = 'ResNet18'
 #opts['model_path'] = None
-opts['model_path'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../models/mdnet_resnet_imagenet.pth')
+opts['model_path'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../models/mdnet_resnet_imagenet_new.pth')
 
 # opts['img_size'] = 107
 # opts['padding'] = 16
