@@ -250,14 +250,22 @@ class MDNetResNet18(MDNet):
                                     resnet.relu,
                                     resnet.maxpool)),
             ('conv2', resnet.layer1),
-            ('conv3', resnet.layer2),
-            ('conv4', nn.Sequential(resnet.layer3,
+            ('conv3', nn.Sequential(resnet.layer2,
                                     nn.AdaptiveAvgPool2d((1, 1)),
                                     LinView())),
+            # ('conv4', nn.Sequential(resnet.layer3,
+            #                         nn.AdaptiveAvgPool2d((1, 1)),
+            #                         LinView())),
+            ('fc4', nn.Sequential(nn.Dropout(0.5),
+                                  nn.Linear(128, 512),
+                                  nn.ReLU())),
+            ('fc5', nn.Sequential(nn.Dropout(0.5),
+                                  nn.Linear(512, 512),
+                                  nn.ReLU())),
         ]))
 
         self.branches = nn.ModuleList([nn.Sequential(nn.Dropout(0.5),
-                                                     nn.Linear(256, 2)) for _ in range(self.K)])
+                                                     nn.Linear(512, 2)) for _ in range(self.K)])
 
 
 class ClassificationLoss(nn.Module):
