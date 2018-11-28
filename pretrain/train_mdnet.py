@@ -60,8 +60,14 @@ def train_mdnet(gpu):
 
     # Init model.
     print('Initializing model...')
-    if opts['model_type'].lower() == 'ResNet18'.lower():
-        model = MDNetResNet18(opts['init_model_path'], K)
+    if opts['model_type'].lower() == 'ResNet18_1'.lower():
+        model = MDNetResNet18_1(opts['init_model_path'], K)
+    elif opts['model_type'].lower() == 'ResNet18_2'.lower():
+        model = MDNetResNet18_2(opts['init_model_path'], K)
+    elif opts['model_type'].lower() == 'ResNet18_3'.lower():
+        model = MDNetResNet18_3(opts['init_model_path'], K)
+    elif opts['model_type'].lower() == 'ResNet18_4'.lower():
+        model = MDNetResNet18_4(opts['init_model_path'], K)
     else:
         model = MDNetVGGM(opts['init_model_path'], K)
     if opts['use_gpu']:
