@@ -54,8 +54,14 @@ class Tracker:
         # Init model
         if verbose:
             print('Loading model from {}...'.format(opts['model_path']))
-        if opts['model_type'].lower() == 'ResNet18'.lower():
-            self.model = MDNetResNet18(opts['model_path'])
+        if opts['model_type'].lower() == 'ResNet18_1'.lower():
+            self.model = MDNetResNet18_1(opts['model_path'])
+        elif opts['model_type'].lower() == 'ResNet18_2'.lower():
+            self.model = MDNetResNet18_2(opts['model_path'])
+        elif opts['model_type'].lower() == 'ResNet18_3'.lower():
+            self.model = MDNetResNet18_3(opts['model_path'])
+        elif opts['model_type'].lower() == 'ResNet18_4'.lower():
+            self.model = MDNetResNet18_4(opts['model_path'])
         else:
             self.model = MDNetVGGM(opts['model_path'])
         self.use_gpu = opts['use_gpu'] and gpu >= 0

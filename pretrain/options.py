@@ -13,10 +13,10 @@ opts['data_path'] = 'data/imagenet.pkl'
 # opts['init_model_path'] = '../models/imagenet-vgg-m.mat'
 # opts['model_path'] = '../models/mdnet_vot-otb_new.pth'
 # opts['model_path'] = '../models/mdnet_imagenet_new.pth'
-opts['model_type'] = 'ResNet18'
+opts['model_type'] = 'ResNet18_4'
 opts['init_model_path'] = None
-# opts['init_model_path'] = '../models/mdnet_resnet_imagenet_new.pth'
-opts['model_path'] = '../models/mdnet_resnet_imagenet_new.pth'
+# opts['init_model_path'] = '../models/mdnet_resnet_107_fc.pth'
+opts['model_path'] = '../models/mdnet_resnet_conv2_nonAvg.pth'
 
 opts['batch_frames'] = 8
 opts['batch_pos'] = 32
