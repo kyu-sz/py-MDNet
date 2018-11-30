@@ -50,7 +50,7 @@ opts['n_neg_update'] = 200
 opts['overlap_pos_update'] = [0.7, 1]
 opts['overlap_neg_update'] = [0, 0.3]
 
-opts['success_thr'] = -1
+opts['success_thr'] = 0
 opts['n_frames_short'] = 20
 opts['n_frames_long'] = 100
 opts['long_interval'] = 10
@@ -58,17 +58,17 @@ opts['long_interval'] = 10
 opts['w_decay'] = 0.0005
 opts['momentum'] = 0.9
 opts['grad_clip'] = 10
-opts['lr_mult'] = {'conv4': 10, 'fc_ds': 10}
+opts['lr_mult'] = {'fc': 10}
 # opts['ft_layers'] = ['fc']
-opts['ft_layers'] = ['conv4', 'fc']
+opts['ft_layers'] = ['fc']
 
-# opts['bbreg_layer'] = ['conv3']
-opts['bbreg_layer'] = ['conv4']
+opts['bbreg_layer'] = ['conv3']
 
 # Filter evolution options.
 opts['enable_fe'] = False
 # opts['fe_layers'] = ['fc4', 'fc5']
-opts['fe_layers'] = ['conv4', 'fc_ds']
+# opts['fe_layers'] = ['conv4', 'fc_ds']
+opts['fe_layers'] = []
 opts['grad_ratio_thresh'] = 0.01
 opts['lr_boost'] = 4096
 opts['loss_thresh'] = 0
