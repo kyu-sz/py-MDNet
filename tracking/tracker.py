@@ -368,6 +368,6 @@ class Tracker:
                         evolved = True
 
             final_loss = loss.data[0]
-            # print("Iter %d, Loss %.4f" % (iter, final_loss))
+            print("Iter %d, Loss %.4f" % (iter, final_loss))
 
         return final_loss

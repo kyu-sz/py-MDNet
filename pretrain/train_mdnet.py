@@ -133,7 +133,7 @@ def train_mdnet(gpu):
 
         cur_prec = prec.mean()
         print("Mean Precision: %.3f" % cur_prec)
-        if cur_prec > best_prec:
+        if cur_prec >= best_prec:
             best_prec = cur_prec
             if opts['use_gpu']:
                 model = model.cpu()
