@@ -6,18 +6,17 @@ opts['use_gpu'] = True
 
 opts['random'] = False
 
-# opts['model_type'] = 'VGG-M'
+opts['model_type'] = 'VGG-M'
 # opts['model_path'] = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
 #                                   '../models/mdnet_vot-otb.pth')
-# opts['model_path'] = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
-#                                   '../models/mdnet_vggm_imagenet.pth')
-opts['model_type'] = 'ResNet18_1'
+opts['model_path'] = os.path.join(os.path.dirname(os.path.join(os.path.realpath(__file__))),
+                                  '../models/mdnet_vggm_imagenet.pth')
+# opts['model_type'] = 'ResNet18_1'
 #opts['model_path'] = None
 # opts['model_path'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../models/mdnet_resnet_107_fc.pth')
 # opts['model_path'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../models/mdnet_resnet_imagenet_conv3.pth')
-
 opts['model_path'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../models/mdnet_resnet_imagenet_conv2.pth')
-
+#
 opts['img_size'] = 107
 opts['padding'] = 16
 # opts['img_size'] = 48
